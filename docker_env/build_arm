@@ -1,0 +1,128 @@
+#!/bin/bash
+# A script that use to build ARM's applications
+
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+END="\033[0m"
+
+DOCKER_IMAGE="cong2021/armenv"
+CONTAINER_NAME="arm_env"
+CROSS_COMPILE="arm-linux-"
+WORK_DIR=`pwd`
+MOUNT_DIR="/work"
+MACHINE=""
+
+echo_red(){
+    echo -e ${RED}"$*"${END}
+}
+
+echo_green(){
+    echo -e ${GREEN}"$*"${END}
+}
+
+PROGRAM=${0}
+usage(){
+    cat <<EOF
+Usage: ${PROGRAM} options [COMMON]
+-h, --help                  Show usage.
+-i, --init                  Check dependency and download docker image.
+-u, --update                Update docker image.
+-m,--machine                machine that you want to build with. 
+                            rpi0/rpi3
+                            orgpi3
+                            c51
+[COMMON]                    Common that will run in docker.
+EOF
+}
+
+__init(){
+    docker --version > /dev/null
+    if [ $? != 0 ]
+    then
+        echo -e ${RED}"Please install docker."${END}
+        exit -1
+    fi
+
+    docker images|grep ${DOCKER_IMAGE} > /dev/null
+    if [ $? != 0 ]
+    then
+        echo_green "Docker image ${DOCKER_IMAGE} do not exist."
+        echo_green "Pull ..."
+        docker pull ${DOCKER_IMAGE}
+    fi
+}
+
+__update(){
+    docker pull ${DOCKER_IMAGE}
+    if [ $? = 0 ]; then
+        echo_green "Docker image[${DOCKER_IMAGE}] is already the latest"
+    else
+        echo_red "Update failed"
+        return -1
+    fi
+    return 1
+}
+
+main(){
+    __init
+
+    docker ps -a |grep ${CONTAINER_NAME} > /dev/null
+    if [ $? == 0 ]
+    then
+        docker rm ${CONTAINER_NAME} > /dev/null
+    fi
+
+    if [ -n "${MACHINE}" ]; then
+        docker run -it -v ${WORK_DIR}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv -m ${MACHINE} "$@"
+    else
+        docker run -it -v ${WORK_DIR}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv "$@"
+    fi
+
+    return $?
+    # docker rm ${CONTAINER_NAME} > /dev/null
+}
+
+ARGS=`getopt -o "ihm:" --long "init,help,machine:" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+while [ $# -gt 0 ] 
+do
+    case ${1} in
+        -i|--init)
+            __init
+            shift
+            ;;
+        -u|--update)
+            __update
+            shift
+            ;;
+        -h|--help)
+            shift
+            usage
+            ;;
+        -m|--machine)
+            MACHINE=${2}
+            echo_green "machine=${MACHINE}"
+            shift 2
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                main "$@"
+                exit $?
+            else
+                usage
+                exit 0
+            fi
+            ;;
+        *)
+            main "$@"
+            exit $?
+            ;;
+    esac
+done

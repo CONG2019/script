@@ -1,0 +1,93 @@
+#!/bin/bash
+# A script that help to set up ARM's build environment.
+
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+END="\033[0m"
+
+echo_red(){
+    echo -e ${RED}"$*"${END}
+}
+
+echo_green(){
+    echo -e ${GREEN}"$*"${END}
+}
+
+PROGRAM=${0}
+usage(){
+    cat <<EOF
+Usage: ${PROGRAM} options command
+-h, --help                  Show usage.
+-m,--machine                machine that you want to build with. 
+                            rpi0/rpi3
+                            orgpi3
+                            c51
+EOF
+}
+
+__setup_rpi0(){
+    toolchains="/toolschain/rpi-zero/armv6-rpi-linux-gnueabihf/bin/"
+    export PATH=${PATH}:${toolchains}
+}
+
+ARGS=`getopt -o "hm:" --long "help,machine" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+# echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+if [ $# = 1 ];then
+    usage
+    exit 0
+fi
+while [ $# -gt 0 ] 
+do
+    case ${1} in
+        -h|--help)
+            shift
+            usage
+            exit 0
+            ;;
+        -m|--machine)
+            machine=${2}
+            shift 2
+            # echo_green $machine
+            case ${machine} in
+                rpi0)
+                    __setup_rpi0
+                    ;;
+                rpi3)
+                    echo_red "Will support later"
+                    ;;
+                orgpi3)
+                    echo_red "Will support later"
+                    ;;
+                c51)
+                    echo_red "Will support later"
+                    ;;
+                *)
+                    echo_red "Unknow machine ${machine}"
+                    # usage
+                    exit -1
+                    ;;
+            esac
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                eval "export PATH=${PATH};$@"
+                exit $?
+            else
+                usage
+                exit 0
+            fi
+            ;;
+        *)
+            shift
+            usage
+            exit 0
+            ;;
+    esac
+done
