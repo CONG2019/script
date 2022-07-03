@@ -2,9 +2,16 @@
 
  A scripts repository that provides some docker build scripts for ARM. 
 
-[TOC]
+\* [Scripts](#scripts) 
+  \* [Docker env](#docker-env) 
+    \* [build_uboot](#build_uboot) 
+    \* [build_arm](#build_arm)
 
-## build_uboot
+## Docker env
+
+> Providing some scripts that help for use docker images
+
+### build_uboot
 
 `build_uboot` is a docker build script that build uboot for rpi-zero.
 
@@ -14,7 +21,7 @@ git clone https://github.com/u-boot/u-boot.git
 ```
 2. Download `docker_build` script
 ```shell
-git clone git@github.com:CONG2019/script.git
+git clone https://github.com/CONG2019/script.git
 ```
 3. Copy `build_uboot` script to uboot's root directory and entering uboot root directory
 ```shell
@@ -34,14 +41,14 @@ make -j4
 exit
 ```
 
-## build_arm
+### build_arm
 
 `build_arm` is a docker build script use docker image `cong2021/armenv`. `cong/2021/armenv` provides some commonly used ARM's toolchains that build by `ct-ng`, You can use this image build your toolschain also.
 
 1. Download `build_arm` script
 
 ```shell
-git clone https://github.com/u-boot/u-boot.git
+git clone https://github.com/CONG2019/script.git
 ```
 
 2. Copy `build_arm` script to your working directory
