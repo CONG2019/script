@@ -2,10 +2,10 @@
 
  A scripts repository that provides some docker build scripts for ARM. 
 
-\* [Scripts](#scripts) 
-  \* [Docker env](#docker-env) 
-    \* [build_uboot](#build_uboot) 
-    \* [build_arm](#build_arm)
+* [Scripts](#scripts) 
+  * [Docker env](#docker-env) 
+    * [build_uboot](#build_uboot) 
+    * [build_arm](#build_arm)
 
 ## Docker env
 
