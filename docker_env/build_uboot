@@ -52,7 +52,7 @@ main(){
     fi
 
     docker run -it -v ${UBOOT_PATH}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} $@
-    docker rm ${CONTAINER_NAME} > /dev/null
+    # docker rm ${CONTAINER_NAME} > /dev/null
 }
 
 case $1 in
@@ -68,4 +68,4 @@ case $1 in
     *)
         main $@
         ;;
-esac        
+esac

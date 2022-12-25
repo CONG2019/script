@@ -82,7 +82,7 @@ main(){
     # docker rm ${CONTAINER_NAME} > /dev/null
 }
 
-ARGS=`getopt -o "ihm:" --long "init,help,machine:" -n "${0}" -- "$@"`
+ARGS=`getopt -o "iuhm:" --long "init,update,help,machine:" -n "${0}" -- "$@"`
 if [ $? != 0 ]; then
     usage
     exit $?
@@ -96,14 +96,17 @@ do
         -i|--init)
             __init
             shift
+            exit 0
             ;;
         -u|--update)
             __update
             shift
+            exit 0
             ;;
         -h|--help)
             shift
             usage
+            exit 0
             ;;
         -m|--machine)
             MACHINE=${2}
@@ -126,3 +129,4 @@ do
             ;;
     esac
 done
+
