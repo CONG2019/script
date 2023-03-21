@@ -1,0 +1,141 @@
+#!/bin/bash
+# A script that help to delete comments of source file.
+
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+END="\033[0m"
+
+echo_red(){
+    echo -e ${RED}"$*"${END}
+}
+
+echo_green(){
+    echo -e ${GREEN}"$*"${END}
+}
+
+PROGRAM=${0}
+usage(){
+    cat <<EOF
+Usage: ${PROGRAM} options file
+TODO: The body should not contain '//', '/* */', '#', it is a bug that would remove the body.
+-h, --help                  Show usage
+-o, --output                output to file, default will output to stdout
+-t, --type                  type of source file, will auto detect by postfix if without this option
+                            c/c++
+                            jave
+                            sh
+                            json
+EOF
+}
+
+# auto detect file type by postfix
+# $1: file name
+# $2: return value c/jave/sh/json
+# return: 0 on success, others on fail.
+get_file_type(){
+    file_type=`echo "${1}"|awk -F. '{print $NF}'`
+    ret=$?
+
+    eval "$2=${file_type}"
+    return ${ret}
+}
+
+# delete comments of source file
+# $1: source file
+# $2: target file
+# $3: file type
+# return: 0 success, other fail
+strip_comments(){
+    temp_file=`mktemp`
+
+    case "${3}" in
+        sh)
+            # echo_green "It is shell script"
+            sed 's/[[:space:]]#.*//g' $1 |sed '/^#/d'|\
+            sed '/^[[:space:]]*$/d' | sed '/^$/d' > ${temp_file}
+            ret=$?
+            ;;
+        c|cpp|jave)
+            # echo_green "It is c/c++ or java program"
+            sed 's/\/\*.*\*\///g' "$1"|sed '/\/\*/,/.*\*\//d' |\
+            sed 's/\/\/.*//g' |\
+            sed '/^[[:space:]]*$/d' |sed '/^$/d' >> ${temp_file}
+            ret=$?
+            ;;
+        *)
+             echo_red "unknown file type !"
+             ret=-1
+             ;;
+    esac
+
+    if [ $ret = "0" ];then
+        if [ -n "$2" ]; then
+            mv ${temp_file} ${2}
+            ret=$?
+        else
+            cat ${temp_file}
+            rm ${temp_file}
+        fi
+    else
+        echo_red "Delete comments failed!"
+        rm ${temp_file}
+    fi
+
+    return ${ret}
+}
+
+source_file=""
+target_file=""
+file_type=""
+
+ARGS=`getopt -o "ho:t:" --long "help,output,type" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+# echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+if [ $# = 1 ];then
+    usage
+    exit 0
+fi
+while [ $# -gt 0 ] 
+do
+    case ${1} in
+        -h|--help)
+            shift
+            usage
+            exit 0
+            ;;
+        -o|--output)
+            target_file=${2}
+            shift 2
+            ;;
+        -t|--type)
+            file_type=${2}
+            shift 2
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                source_file=${1}
+                # echo_green "source_file=$1"
+                if [ -z "${file_type}" ];then
+                    get_file_type "$source_file" file_type
+                fi
+                # echo_green "file_type=${file_type}"
+                strip_comments "$source_file" "$target_file" "$file_type"
+                exit $?
+            else
+                usage
+                exit 0
+            fi
+            ;;
+        *)
+            shift
+            usage
+            exit 0
+            ;;
+    esac
+done
