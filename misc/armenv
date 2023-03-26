@@ -65,7 +65,7 @@ do
                     echo_red "Will support later"
                     ;;
                 c51)
-                    echo_red "Will support later"
+                    echo_green "Toolchains: sdcc stcgal packihx hex2bin stcflash"
                     ;;
                 *)
                     echo_red "Unknow machine ${machine}"

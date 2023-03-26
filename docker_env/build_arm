@@ -11,6 +11,8 @@ CROSS_COMPILE="arm-linux-"
 WORK_DIR=`pwd`
 MOUNT_DIR="/work"
 MACHINE=""
+EXPAND_MOUNT=""
+DEVICES=""
 
 echo_red(){
     echo -e ${RED}"$*"${END}
@@ -63,6 +65,27 @@ __update(){
     return 1
 }
 
+# $1: The machine type you want to build
+__init_env(){
+    case "${1}" in
+        c51)
+            # EXPAND_MOUNT="${EXPAND_MOUNT} -v /dev:/dev"
+            for line in `ls /dev|grep -e "ttyUSB\|ttyACM"`
+            do
+                DEVICES="${DEVICES} --device=/dev/${line}"
+            done
+            # echo_green "$DEVICES"
+            ;;
+        orgpi3)
+            ;;
+        rpi0|rpi3)
+            ;;
+        *)
+            echo_red "Not support this machine ${1}"
+            ;;
+    esac
+}
+
 main(){
     __init
 
@@ -72,10 +95,11 @@ main(){
         docker rm ${CONTAINER_NAME} > /dev/null
     fi
 
+    __init_env "${MACHINE}"
     if [ -n "${MACHINE}" ]; then
-        docker run -it -v ${WORK_DIR}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv -m ${MACHINE} "$@"
+        docker run -it ${DEVICES} -v ${WORK_DIR}:${MOUNT_DIR} ${EXPAND_MOUNT} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv -m ${MACHINE} "$@"
     else
-        docker run -it -v ${WORK_DIR}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv "$@"
+        docker run -it ${DEVICES} -v ${WORK_DIR}:${MOUNT_DIR} ${EXPAND_MOUNT} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} armenv "$@"
     fi
 
     return $?
