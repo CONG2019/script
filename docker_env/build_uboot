@@ -8,8 +8,10 @@ END="\033[0m"
 DOCKER_IMAGE="cong2021/uboot"
 CONTAINER_NAME="uboot_env"
 CROSS_COMPILE="arm-linux-gnueabi-"
+ARCH="arm"
 UBOOT_PATH=`pwd`
 MOUNT_DIR="/work"
+KBUILD_OUTPUT="${MOUNT_DIR}/build"
 
 usage(){
     cat <<EOF
@@ -51,7 +53,7 @@ main(){
         docker rm ${CONTAINER_NAME}
     fi
 
-    docker run -it -v ${UBOOT_PATH}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} $@
+    docker run -it -v ${UBOOT_PATH}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" -e ARCH="${ARCH}" -e KBUILD_OUTPUT="${KBUILD_OUTPUT}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} $@
     # docker rm ${CONTAINER_NAME} > /dev/null
 }
 
