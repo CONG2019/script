@@ -51,6 +51,9 @@
        }
    }
    
+   # start docker
+   ./build_arm -m c51 bash
+
    # compile led.c
    sdcc -mmcs51 led.c
    
@@ -58,4 +61,33 @@
    stcgal -P stc89 -b 115200 -D led.ihx -p /dev/ttyUSB1
    ```
 
+# How to use start_service
+1. Install start_service
+   ```shell
+   # TODO: should replace by start_server -n
+   git clone https://github.com/CONG2019/script.git
+   sudo cp script/etc/mservice.conf /etc/
+   cp script/etc/start_service /usr/sbin/start_service
+
+   start_service -n
+   ```
+2. Download docker image
+   ```shell
+   start_service -i
+   ```
+
+3. Change mservice config
+   ```shell
+   # you can disable or enable the service that you need
+   vim /etc/mservice.conf
+   ```
+
+4. start start_service
+   ```shell
+   # run in daemon mode
+   start_service -d
+
+   # run in foreground
+   start_service bash
+   ```
    

@@ -1,0 +1,309 @@
+#!/bin/bash
+# A script that help to set up some useful services easily
+
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+END="\033[0m"
+
+DOCKER_IMAGE="cong2021/server"
+CONTAINER_NAME="server_tmp"
+WORK_DIR=`pwd`
+MOUNT_DIR="/work"
+CONFIG="/etc/mservice.conf"
+
+DOCKER_OPTION="-it"
+RUN_CMD=""
+PORT_MAPPING=""
+DIR_MAPPING="-v ${CONFIG}:${CONFIG}"
+
+echo_red(){
+    echo -e ${RED}"$*"${END}
+}
+
+echo_green(){
+    echo -e ${GREEN}"$*"${END}
+}
+
+PROGRAM=${0}
+usage(){
+    cat <<EOF
+Usage: ${PROGRAM} options [COMMON]
+-h, --help                  Show usage.
+-i, --init                  Check dependency and download docker image.
+-u, --update                Update docker image.
+-d, --daemon                Run as daemon.
+-n, --install               Install this script and demo config file to your system.
+[COMMON]                    Common that will run in docker.
+EOF
+}
+
+__init(){
+    docker --version > /dev/null
+    if [ $? != 0 ]
+    then
+        echo -e ${RED}"Please install docker."${END}
+        exit -1
+    fi
+
+    docker images|grep ${DOCKER_IMAGE} > /dev/null
+    if [ $? != 0 ]
+    then
+        echo_green "Docker image ${DOCKER_IMAGE} do not exist."
+        echo_green "Pull ..."
+        docker pull ${DOCKER_IMAGE}
+    fi
+}
+
+__update(){
+    docker pull ${DOCKER_IMAGE}
+    if [ $? = 0 ]; then
+        echo_green "Docker image[${DOCKER_IMAGE}] is already the latest"
+    else
+        echo_red "Update failed"
+        return -1
+    fi
+    return 1
+}
+
+# For jq not support comments in JSON, need delete comments first
+# $1: source file
+# $2: target file
+__delete_comments(){
+    src=${1}
+    target=${2}
+
+    sed 's/\/\*.*\*\///g' "${src}"|sed '/\/\*/,/.*\*\//d' |\
+    sed 's/\/\/.*//g' |\
+    sed '/^[[:space:]]*$/d' |sed '/^$/d' > "${target}"
+
+}
+
+# load server config /etc/mservice.conf
+__load_config(){
+    jq --version > /dev/null
+    if [ $? != "0" ]; then
+        echo_red "Please install jq."
+        exit 1
+    fi
+
+    # For jq not support comments in JSON, need delete comments first
+    if [ ! -f ${CONFIG} ]; then
+        echo_red "Not find config file ${CONFIG}"
+        exit 1
+    fi
+    tmp_config=`mktemp -u`
+    __delete_comments "${CONFIG}" "${tmp_config}"
+
+    echo_red "load config"
+    i=0
+    service_name=`jq -r ".services[${i}].service" ${tmp_config}`
+    while [ "${service_name}" != "null" ]
+    do
+        echo_green "Process service ${service_name}"
+        case ${service_name} in
+            tftpd)
+                # echo_green "tftp service"
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            code)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            qbittorrent)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            httpd)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            samba)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                options=`jq -r ".services[${i}].options" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    if [ "${options}" != "null" ];then
+                        DOCKER_OPTION="${DOCKER_OPTION} ${options}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            aria2)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                options=`jq -r ".services[${i}].options" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    if [ "${options}" != "null" ];then
+                        DOCKER_OPTION="${DOCKER_OPTION} ${options}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            cpolar)
+                port=`jq -r ".services[${i}].port" ${tmp_config}`
+                dir=`jq -r ".services[${i}].dir" ${tmp_config}`
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                options=`jq -r ".services[${i}].options" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    if [ "${port}" != "null" ];then
+                        PORT_MAPPING="${PORT_MAPPING} -p ${port}"
+                    fi
+                    if [ "${dir}" != "null" ];then
+                        DIR_MAPPING="${DIR_MAPPING} -v ${dir}"
+                    fi
+                    if [ "${options}" != "null" ];then
+                        DOCKER_OPTION="${DOCKER_OPTION} ${options}"
+                    fi
+                    # echo_green $PORT_MAPPING
+                fi
+                ;;
+            *)
+                echo_red "Not support this service[${service_name}]"
+                ;;
+        esac
+
+        i=$((i+1))
+        service_name=`jq -r ".services[${i}].service" "${tmp_config}"`
+    done
+
+    echo_green "PORT_MAPPING=${PORT_MAPPING}"
+    echo_green "DIR_MAPPING=${DIR_MAPPING}"
+    echo_green "DOCKER_OPTION=${DOCKER_OPTION}"
+
+    rm ${tmp_config}
+
+}
+
+__install(){
+    # TODO
+    echo_red "will support later"
+}
+
+main(){
+    __init
+
+    docker ps -a |grep ${CONTAINER_NAME} > /dev/null
+    if [ $? = 0 ]
+    then
+        docker rm ${CONTAINER_NAME} > /dev/null
+    fi
+
+    __load_config
+    # -v ${WORK_DIR}:${MOUNT_DIR} -w ${MOUNT_DIR}  # not need to set work dir
+    # --network host: use this is not securt
+    docker run ${DOCKER_OPTION} ${PORT_MAPPING} ${DIR_MAPPING} --name ${CONTAINER_NAME} ${DOCKER_IMAGE} ${RUN_CMD}$@
+
+    return $?
+    # docker rm ${CONTAINER_NAME} > /dev/null
+}
+
+ARGS=`getopt -o "iuhdn" --long "init,update,help,daemon,install" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+while [ $# -gt 0 ] 
+do
+    case ${1} in
+        -i|--init)
+            __init
+            shift
+            exit 0
+            ;;
+        -u|--update)
+            __update
+            shift
+            exit 0
+            ;;
+        -h|--help)
+            shift
+            usage
+            exit 0
+            ;;
+        -d|--daemon)
+            shift
+            DOCKER_OPTION="${DOCKER_OPTION} -d"
+            RUN_CMD="bash"
+            ;;
+        -n|--install)
+            shift
+            __install
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                main "$@"
+                exit $?
+            else
+                if [ -z "${RUN_CMD}" ];then
+                    usage
+                    exit 0
+                else
+                    main "$@"
+                fi
+            fi
+            ;;
+        *)
+            main "$@"
+            exit $?
+            ;;
+    esac
+done

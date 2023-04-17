@@ -1,0 +1,403 @@
+#!/bin/bash
+# A script that start multi services that config by /etc/mservice.conf
+
+RED="\033[31;1m"
+GREEN="\033[32;1m"
+END="\033[0m"
+
+CONFIG="/etc/mservice.conf"
+
+echo_red(){
+    echo -e ${RED}"$*"${END}
+}
+
+echo_green(){
+    echo -e ${GREEN}"$*"${END}
+}
+
+PROGRAM=${0}
+usage(){
+    cat <<EOF
+Usage: ${PROGRAM} options [COMMON]
+-h, --help                  Show usage.
+start                       Start multi service
+restart                     Restart multi service
+stop                        Stop multi service
+EOF
+}
+
+# For jq not support comments in JSON, need delete comments first
+# $1: source file
+# $2: target file
+__delete_comments(){
+    src=${1}
+    target=${2}
+
+    sed 's/\/\*.*\*\///g' "${src}"|sed '/\/\*/,/.*\*\//d' |\
+    sed 's/\/\/.*//g' |\
+    sed '/^[[:space:]]*$/d' |sed '/^$/d' > "${target}"
+
+}
+
+TFTPD_CONFIG="/etc/default/tftpd-hpa"
+# Start tftpd service
+# $1: config file
+# $2: config index
+__start_tftpd(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start tftpd service"
+    port=`jq -r ".services[${idx}].port" ${tmp_config}`   # 69:69/udp
+    port=`echo ${port}|cut -d ':' -f 2|cut -d '/' -f 1` # port use in container
+    dir=`jq -r ".services[${idx}].dir" ${tmp_config}`     # /home/cong/tftpboot:/root/tftpboot:rw
+    dir=`echo ${dir}|cut -d ':' -f 2`                   # dir use in container
+
+    echo_green "tftpd: port=${port}, path=${dir}"
+    cur_port=`grep TFTP_ADDRESS ${TFTPD_CONFIG} |cut -d ':' -f 2|cut -d '"' -f 1`
+    if [ "${cur_port}" != "${port}" ];then
+        echo_green "Port change to ${cur_port} => ${port}"
+        sed -i ${TFTPD_CONFIG} -e "s/^.*TFTP_ADDRESS.*\$/TFTP_ADDRESS=\"0.0.0.0:${port}\"/g"
+    fi
+
+    cur_dir=`grep TFTP_DIRECTORY ${TFTPD_CONFIG} |cut -d '=' -f 2|cut -d '"' -f 2`
+    if [ "${cur_dir}" != "${dir}" ];then
+        echo_green "Dir change to ${cur_dir} => ${dir}"
+        sed -i ${TFTPD_CONFIG} -e "s/^.*TFTP_DIRECTORY.*\$/TFTP_DIRECTORY=\"${dir}\"/g"
+    fi
+
+    service tftpd-hpa start
+}
+
+__stop_tftpd(){
+    echo_green "Stop tftpd."
+    service tftpd-hpa stop
+}
+
+CODE_SERVER="/root/bin/code-server/bin/code-server"
+CODE_PROGRAM_NAME="node"
+# Start code service
+# $1: config file
+__start_code(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start code."
+    port=`jq -r ".services[${idx}].port" ${tmp_config}`   # 7777:7777/tcp
+    port=`echo ${port}|cut -d ':' -f 2|cut -d '/' -f 1` # port use in container
+
+    # Don't care about dir
+    # dir=`jq -r ".services[${idx}].dir" ${tmp_config}`
+    # dir=`echo ${dir}|cut -d ':' -f 2`
+
+    login=`jq -r ".services[${idx}].login" ${tmp_config}`
+    if [ "${login}" = "true" ]; then
+        password=`jq -r ".services[${idx}].password" ${tmp_config}`
+        eval "export PASSWORD=${password}; $CODE_SERVER --port ${port} --host 0.0.0.0 --auth password > /dev/null&"
+    else
+        eval "$CODE_SERVER --port ${port} --host 0.0.0.0"
+    fi
+}
+
+__stop_code(){
+    echo_green "Stop code."
+
+    killall ${CODE_PROGRAM_NAME}
+}
+
+# Start httpd service
+# $1: config file
+# $2: config index
+__start_httpd(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start httpd."
+}
+
+__stop_httpd(){
+    echo_green "Stop httpd."
+}
+
+# Start qbittorrent service
+# $1: config file
+# $2: config index
+__start_qbittorrent(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start qbittorrent."
+    port=`jq -r ".services[${idx}].port" ${tmp_config}`   # 8080:8080/tcp
+    port=`echo ${port}|cut -d ':' -f 2|cut -d '/' -f 1` # port use in container
+
+    qbittorrent-nox -d --webui-port=${port}
+}
+
+__stop_qbittorrent(){
+    echo_green "Stop qbittorrent."
+
+    killall qbittorrent-nox
+}
+
+SAMBA_CONFIG="/etc/samba/smb.conf"
+# Start samba service
+# $1: config file
+# $2: config index
+__start_samba(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start samba."
+    dir=`jq -r ".services[${idx}].dir" ${tmp_config}`   # samba work dir
+    dir=`echo ${dir}|cut -d ':' -f 2`                   # dir use in container
+
+    cur_dir="/root/sambaboot"
+    if [ "${cur_dir}" != "${dir}" ];then
+        echo_green "Dir change to ${cur_dir} => ${dir}"
+        echo_red "TODO: not support change container's samba dir, it always be ${cur_dir}, but you can change the mapping relationship of the host"
+        # sed -i ${SAMBA_CONFIG} -e "s/^.*path = \/root\/sambaboot.*\$/\tpath=\"${dir}\"/g"
+    fi
+
+    service smbd start
+}
+
+__stop_samba(){
+    echo_green "Stop samba."
+
+    service smbd stop
+}
+
+ARIA2_CONFIG="/root/.config/aria2/aria2.config"
+# Start aria2 service
+# $1: config file
+# $2: config index
+__start_aria2(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start aria2."
+
+    aria2c --conf-path=${ARIA2_CONFIG} &
+    service nginx start
+}
+
+__stop_aria2(){
+    echo_green "Stop aria2."
+
+    killall aria2c
+    service nginx stop
+}
+
+CPOLAR_CONFIG="/usr/local/etc/cpolar/cpolar.yml"
+CPOLAR_LOG="/tmp/cpolar_access.log"
+# Start cpolar service
+# $1: config file
+# $2: config index
+__start_cpolar(){
+    tmp_config=${1}
+    idx=$2
+
+    echo_green "Start cpolar."
+    password=`jq -r ".services[${idx}].password" ${tmp_config}`
+
+    /usr/local/bin/cpolar authtoken ${password}
+    /usr/local/bin/cpolar start-all -dashboard=on -daemon=on -config=${CPOLAR_CONFIG} -log=${CPOLAR_LOG}&
+}
+
+__stop_cpolar(){
+    echo_green "Stop cpolar."
+
+    killall cpolar
+}
+
+start(){
+    echo_green 'Start services ...'
+
+    jq --version > /dev/null
+    if [ $? != "0" ]; then
+        echo_red "Please install jq."
+        exit 1
+    fi
+
+    # For jq not support comments in JSON, need delete comments first
+    if [ ! -f ${CONFIG} ]; then
+        echo_red "Not find config file ${CONFIG}"
+        exit 1
+    fi
+    tmp_config=`mktemp -u`
+    __delete_comments "${CONFIG}" "${tmp_config}"
+
+    i=0
+    service_name=`jq -r ".services[${i}].service" ${tmp_config}`
+    while [ "${service_name}" != "null" ]
+    do
+        echo_green "Process service ${service_name}"
+        case ${service_name} in
+            tftpd)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_tftpd "${tmp_config}" "${i}"
+                else
+                    echo_red "tftpd service is disable."
+                fi
+                ;;
+            code)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_code "${tmp_config}" "${i}"
+                else
+                    echo_red "code service is disable."
+                fi
+                ;;
+            qbittorrent)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_qbittorrent "${tmp_config}" "${i}"
+                else
+                    echo_red "qbittorrent service is disable."
+                fi
+                ;;
+            httpd)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_httpd "${tmp_config}" "${i}"
+                else
+                    echo_red "httpd service is disable."
+                fi
+                ;;
+            samba)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_samba "${tmp_config}" "${i}"
+                else
+                    echo_red "samba service is disable."
+                fi
+                ;;
+            aria2)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_aria2 "${tmp_config}" "${i}"
+                else
+                    echo_red "aria2 service is disable."
+                fi
+                ;;
+            cpolar)
+                enable=`jq -r ".services[${i}].enable" ${tmp_config}`
+                if [ "${enable}" = "true" ]; then
+                    __start_cpolar "${tmp_config}" "${i}"
+                else
+                    echo_red "aria2 service is disable."
+                fi
+                ;;
+            *)
+                echo_red "Not support this service[${service_name}]"
+                ;;
+        esac
+
+        i=$((i+1))
+        service_name=`jq -r ".services[${i}].service" "${tmp_config}"`
+    done
+
+    rm ${tmp_config}
+}
+
+stop(){
+    echo_red 'Stop services ...'
+
+    # For jq not support comments in JSON, need delete comments first
+    if [ ! -f ${CONFIG} ]; then
+        echo_red "Not find config file ${CONFIG}"
+        exit 1
+    fi
+    tmp_config=`mktemp -u`
+    __delete_comments "${CONFIG}" "${tmp_config}"
+
+    i=0
+    service_name=`jq -r ".services[${i}].service" ${tmp_config}`
+    while [ "${service_name}" != "null" ]
+    do
+        case ${service_name} in
+            tftpd)
+                __stop_tftpd
+                ;;
+            code)
+                __stop_code
+                ;;
+            qbittorrent)
+                __stop_qbittorrent
+                ;;
+            httpd)
+                __stop_httpd
+                ;;
+            samba)
+                __stop_samba
+                ;;
+            aria2)
+                __stop_aria2
+                ;;
+            cpolar)
+                __stop_cpolar
+                ;;
+            *)
+                echo_red "Not support this service[${service_name}]"
+                ;;
+        esac
+
+        i=$((i+1))
+        service_name=`jq -r ".services[${i}].service" "${tmp_config}"`
+    done
+
+    rm ${tmp_config}
+}
+
+restart(){
+    stop
+    start
+}
+
+ARGS=`getopt -o "h" --long "start,restart,stop" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+while [ $# -gt 0 ] 
+do
+    case ${1} in
+        -h|--help)
+            shift
+            usage
+            exit 0
+            ;;
+        start)
+            shift
+            start
+            exit $?
+            ;;
+        restart)
+            shift
+            restart
+            exit $?
+            ;;
+        stop)
+            shift
+            stop
+            exit $?
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                continue
+            else
+                usage
+                exit 0
+            fi
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
