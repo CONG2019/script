@@ -12,6 +12,7 @@ ARCH="arm"
 UBOOT_PATH=`pwd`
 MOUNT_DIR="/work"
 KBUILD_OUTPUT="${MOUNT_DIR}/build"
+EXPAND_MOUNT=""
 
 usage(){
     cat <<EOF
@@ -19,6 +20,7 @@ Usage: $1 options
 -h, --help                  Show usage.
 -i, --init                  Check dependency.
 -u, --update                Update docker image.
+-k, --kernel                Kernel dir, using for building kernel moudles.
 [COMMON]                    Common that will run in docker.
 EOF
 }
@@ -53,21 +55,55 @@ main(){
         docker rm ${CONTAINER_NAME}
     fi
 
-    docker run -it -v ${UBOOT_PATH}:${MOUNT_DIR} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" -e ARCH="${ARCH}" -e KBUILD_OUTPUT="${KBUILD_OUTPUT}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} $@
+    docker run -it -v ${UBOOT_PATH}:${MOUNT_DIR} ${EXPAND_MOUNT} -w ${MOUNT_DIR} -e CROSS_COMPILE="${CROSS_COMPILE}" -e ARCH="${ARCH}" -e KBUILD_OUTPUT="${KBUILD_OUTPUT}" --name ${CONTAINER_NAME} ${DOCKER_IMAGE} $@
     # docker rm ${CONTAINER_NAME} > /dev/null
 }
 
-case $1 in
-    -h|--help)
-        usage
-        ;;
-    -i|--init)
-        __init
-        ;;
-    -u|--update)
-        __update
-        ;;
-    *)
-        main $@
-        ;;
-esac
+ARGS=`getopt -o "hiuk:" --long "help,init,update,kernel:" -n "${0}" -- "$@"`
+if [ $? != 0 ]; then
+    usage
+    exit $?
+fi
+echo ARGS=[$ARGS]
+eval set -- "${ARGS}"
+
+while [ $# -gt 0 ] 
+do
+    case $1 in
+        -h|--help)
+            usage
+            shift
+            exit 0
+            ;;
+        -i|--init)
+            __init
+            shift
+            exit 0
+            ;;
+        -u|--update)
+            __update
+            shift
+            exit 0
+            ;;
+        -k|--kernel)
+            kernel_dir=$2
+            KBUILD_OUTPUT=""
+            EXPAND_MOUNT="-v ${kernel_dir}:/kernel"
+            shift 2
+            ;;
+        --)
+            shift
+            if [ $# -ge 1 ]; then
+                main "$@"
+                exit $?
+            else
+                usage
+                exit 0
+            fi
+            ;;
+        *)
+            main "$@"
+            exit $?
+            ;;
+    esac
+done
